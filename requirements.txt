@@ -1,2 +1,4 @@
-nglview=3.0.6
-biopython=1.81
+python=3.10.11
+biopython
+beautifulsoup4
+pandas

@@ -1,5 +1,6 @@
 from Bio.PDB import *
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
+import pandas as pd
 import warnings
 import csv
 import os
@@ -47,7 +48,7 @@ def getBindingRegionResidues(chain1, chain2):
     
     return output
 
-def getEpitopeParatopeInteractions(pdbFile, outputFile = None):
+def getEpitopeParatopeInteractions(pdbFile, path = None, outputFile = None):
     warnings.simplefilter('ignore', PDBConstructionWarning)
     parser = PDBParser()
     structure = parser.get_structure(id = pdbFile, file = pdbFile)
@@ -124,21 +125,52 @@ def getEpitopeParatopeInteractions(pdbFile, outputFile = None):
 
     # Write file
     if outputFile != None:
-        fields = ['chain', 'AA#', 'AA', 'Binding']
-        path = os.path.join('Data', outputFile)
+        header = [f"{v['molecule']}: {v['chain']}" for k, v in compounds.items()]
+        path = os.path.join(path, outputFile)
         with open(path, 'w', newline = '') as csvfile:
             csvwriter = csv.writer(csvfile)
-            csvwriter.writerow(fields)
+            csvwriter.writerow(header)
             csvwriter.writerows(data)
 
     return data
     
-def compileData(pdb_id, output):
-    getpdb(pdb_entry=pdb_id, out_path = 'pdbFiles')
-    if output:
-        getEpitopeParatopeInteractions(pdbFile = f'pdbFiles/{pdb_id}.pdb', outputFile = f'{pdb_id}_binding.csv')
-    else:
-        getEpitopeParatopeInteractions(pdbFile = f'pdbFiles/{pdb_id}.pdb')
+def compileData(pdb_id, output = False, removePDB = False, type = 'Nanobody'):
+
+    try:
+        getpdb(pdb_entry=pdb_id, out_path = 'pdbFiles')
+        if output:
+            getEpitopeParatopeInteractions(
+                pdbFile = f'pdbFiles/{pdb_id}.pdb',
+                path = f"Data/{type}",
+                outputFile = f'{pdb_id}_binding.csv'
+                )
+        else:
+            getEpitopeParatopeInteractions(pdbFile = f'pdbFiles/{pdb_id}.pdb')
+
+    except Exception as error:
+        print(f"PDB ID - {pdb_id} errored with - {error}")
+
+    if removePDB:
+        os.remove(f'pdbFiles/{pdb_id}.pdb')
 
 if __name__ == "__main__":
-    compileData('8jlz', output = True)
+
+    #Check if directories exist
+    if os.path.exists("Data") == False:
+        os.makedirs("Data/Antibody")
+        os.mkdir('Data/Nanobody')
+
+        from getPDBs import *
+        createMetadata()
+
+    if os.path.exists("pdbFiles") == False:
+        os.mkdir('pdbFiles/')
+
+    assert(os.path.exists("Data"))
+    assert(os.path.exists("pdbFiles"))
+    
+    nanobody_metadata = pd.read_csv("Data/Nanobody/Nanobody_metadata.csv")
+    pdbs = nanobody_metadata['PDB'].to_list()
+    for i in range(10):
+        compileData(pdbs[i], output = True, removePDB = True)
+    
