@@ -179,7 +179,7 @@ if __name__ == "__main__":
         # Get just the chain pairings
         chainPairings = row.str.findall(r"VH: (\w)").item()
 
-        #compileData(pdb, chainPairings = chainPairings, header = row.item(), output = True, removePDB = True)
+        compileData(pdb, chainPairings = chainPairings, header = row.item(), output = True, removePDB = True)
     
 '''
 To Use this file compile data will need:
