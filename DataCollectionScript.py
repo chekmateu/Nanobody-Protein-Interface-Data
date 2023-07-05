@@ -48,24 +48,28 @@ def getBindingRegionResidues(chain1, chain2):
     
     return output
 
-def getEpitopeParatopeInteractions(pdbFile, path = None, outputFile = None):
+def getEpitopeParatopeInteractions(pdbFile, chainPairings, header, path = None, outputFile = None):
     warnings.simplefilter('ignore', PDBConstructionWarning)
     parser = PDBParser()
     structure = parser.get_structure(id = pdbFile, file = pdbFile)
+    '''
+    Calculate all chain interactions in the file also store chains for later 
 
-    # Calculate all chain interactions in the file also store chains for later
-    pairs = []   
-    allChains = []
-    for model in structure:
-        for chain in model:
-            allChains.append(chain.get_id())
-            for pair in model:
-                if chain.get_id() == pair.get_id():
-                    continue
-                else:
-                    pairs.append([
-                        chain, pair
-                    ])
+    Antigen Chain are everything not in chain Pairings and vice versa for antibodies/nanobodies.
+    Then make pairs based on just Fv antigen interactions 
+    '''
+    allChains = [c.get_id() for c in structure.get_chains()]
+    Fvs = chainPairings
+    antigenCs = [c for c in allChains if c not in chainPairings]
+
+    pairs = []
+    for c1 in Fvs:
+        c1 = [c for c in structure.get_chains() if c.get_id() == c1][0]
+        for c2 in antigenCs:
+            c2 = [c for c in structure.get_chains() if c.get_id() == c2][0]
+            pairs.append([
+                c1, c2
+            ])
 
     ResidueInContact = []
     for pair in pairs:
@@ -73,21 +77,6 @@ def getEpitopeParatopeInteractions(pdbFile, path = None, outputFile = None):
     
     # Remove empty entries
     ResidueInContact = [item for item in ResidueInContact if len(item[list(item.keys())[0]]) != 0]
-
-    # Remove intermolecular chain interactions
-    compounds = structure.header['compound']
-    chains = {k: v['chain'].replace(',', '').upper().split() for k, v in compounds.items()}
-    InterChain = []
-    for k, v in chains.items():
-        for chain in v:
-            for copy in v:
-                if copy == chain:
-                    continue
-                else:
-                    InterChain.append([
-                        chain, copy
-                    ])
-    ResidueInContact = [item for item in ResidueInContact if list(item.keys()) not in InterChain]
 
     # Create csv file
 
@@ -125,27 +114,34 @@ def getEpitopeParatopeInteractions(pdbFile, path = None, outputFile = None):
 
     # Write file
     if outputFile != None:
-        header = [f"{v['molecule']}: {v['chain']}" for k, v in compounds.items()]
         path = os.path.join(path, outputFile)
         with open(path, 'w', newline = '') as csvfile:
             csvwriter = csv.writer(csvfile)
-            csvwriter.writerow(header)
+            csvwriter.writerow([header])
             csvwriter.writerows(data)
 
     return data
     
-def compileData(pdb_id, output = False, removePDB = False, type = 'Nanobody'):
-
+def compileData(pdb_id, chainPairings, header, output = False, removePDB = False, type = 'Nanobody'):
+    '''
+    Code to compile the data.
+    '''
     try:
         getpdb(pdb_entry=pdb_id, out_path = 'pdbFiles')
         if output:
             getEpitopeParatopeInteractions(
                 pdbFile = f'pdbFiles/{pdb_id}.pdb',
+                chainPairings = chainPairings,
+                header = header,
                 path = f"Data/{type}",
                 outputFile = f'{pdb_id}_binding.csv'
                 )
         else:
-            getEpitopeParatopeInteractions(pdbFile = f'pdbFiles/{pdb_id}.pdb')
+            getEpitopeParatopeInteractions(
+                pdbFile = f'pdbFiles/{pdb_id}.pdb',
+                header = header,
+                chainPairings = chainPairings
+                )
 
     except Exception as error:
         print(f"PDB ID - {pdb_id} errored with - {error}")
@@ -154,6 +150,10 @@ def compileData(pdb_id, output = False, removePDB = False, type = 'Nanobody'):
         os.remove(f'pdbFiles/{pdb_id}.pdb')
 
 if __name__ == "__main__":
+
+    '''
+    Current version only works on nanobodies since the code can't handle different VH and VL regions
+    ''' 
 
     #Check if directories exist
     if os.path.exists("Data") == False:
@@ -171,6 +171,21 @@ if __name__ == "__main__":
     
     nanobody_metadata = pd.read_csv("Data/Nanobody/Nanobody_metadata.csv")
     pdbs = nanobody_metadata['PDB'].to_list()
-    for i in range(10):
-        compileData(pdbs[i], output = True, removePDB = True)
+    for pdb in pdbs:
+
+        # Store the full chain pairings data
+        row = nanobody_metadata.query(f"PDB == '{pdb}'")['Chain Pairings']
+
+        # Get just the chain pairings
+        chainPairings = row.str.findall(r"VH: (\w)").item()
+
+        #compileData(pdb, chainPairings = chainPairings, header = row.item(), output = True, removePDB = True)
     
+'''
+To Use this file compile data will need:
+ - The pdb file containing the antibody antigen.
+ - chainPairings is the nanobody chains
+ - header can be left as any string
+ - output bool
+ - removePDB bool
+'''
