@@ -3,3 +3,7 @@ pdbFiles/
 TestScript.ipynb/
 Data/
 pdbFiles/
+
+# Nonredundant Dataset of nanobody antigen crystal structures
+NonredundantNb1/
+NonredundantNb2/
