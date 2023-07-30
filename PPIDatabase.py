@@ -104,5 +104,3 @@ class PPIDatabase(Interactions.Interactions):
             f.writelines(test)
 
         return train, test
-
-

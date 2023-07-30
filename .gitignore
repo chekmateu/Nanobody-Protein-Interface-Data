@@ -7,3 +7,6 @@ pdbFiles/
 # Nonredundant Dataset of nanobody antigen crystal structures
 NonredundantNb1/
 NonredundantNb2/
+
+# Test Datasets
+ScanNetdata_test_pdbFiles/
