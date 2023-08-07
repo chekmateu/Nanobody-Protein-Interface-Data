@@ -1,5 +1,4 @@
 from Bio.PDB import *
-from Bio.PDB import Structure, Model, Chain
 
 import glob as glob
 import numpy as np
@@ -52,7 +51,7 @@ class PPIDatabase(Interactions.Interactions):
     >8dt8_A
     {Chain ID} {Res ID} {1 Letter AA Code} {Is Binding or not}
     '''
-    def generatetxtLabelFile(self, outdir = 'Data', split = [0.9, 0.1]):
+    def generatetxtLabelFile(self, out_path = 'Data', split = [0.9, 0.1]):
 
         assert(split[0]+split[1] == 1)
 
@@ -73,12 +72,16 @@ class PPIDatabase(Interactions.Interactions):
                 startNewLine = 0
             interactionObj.generateLabels(ScanNet = True)
 
+        with open(f'{out_path}/ScanNetDataReceptors.txt', 'r') as receptors, open(f'{out_path}/ScanNetDataLigands.txt', 'r') as ligands:
+            with open(f'{out_path}/ScanNetData.txt', 'w') as combinedData:
+                combinedData.write(receptors.read() + ligands.read())
+
         '''
         Split ScanNetData, 90% train 10% test
         '''
         print('Splitting ScanNet Data')
         delimiter = '>'
-        with open(f'{outdir}/ScanNetData.txt', 'r') as f:
+        with open(f'{out_path}/ScanNetData.txt', 'r') as f:
             data = f.read()
             data = [delimiter + i for i in data.split(delimiter) if i]
             random.shuffle(data)
@@ -97,10 +100,10 @@ class PPIDatabase(Interactions.Interactions):
 
         train, test = split_train_test(data = data)
 
-        with open(f'{outdir}/ScanNetData_train.txt', 'a') as f:
+        with open(f'{out_path}/ScanNetData_train.txt', 'a') as f:
             f.writelines(train)
 
-        with open(f'{outdir}/ScanNetData_test.txt', 'a') as f:
+        with open(f'{out_path}/ScanNetData_test.txt', 'a') as f:
             f.writelines(test)
 
         return train, test

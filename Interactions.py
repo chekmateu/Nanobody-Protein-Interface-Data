@@ -1,13 +1,8 @@
 from Bio.PDB import *
-from Bio.PDB import Structure, Model, Chain
 from Bio.PDB.PDBExceptions import PDBConstructionWarning
 from Bio.PDB.ResidueDepth import ResidueDepth, get_surface, min_dist
 import warnings
 import numpy as np
-import pandas as pd
-import csv
-import torch
-import os
 
 '''
 Data obj for a pdb interaction file
@@ -67,7 +62,7 @@ class Interactions():
     def calcPercentAAKNearestNeighborhood(structure, residue):
         return
 
-    def generateLabels(self, ScanNet = False, ReturnTensorDict = False):
+    def generateLabels(self, ScanNet = False, ReturnTensorDict = False, out_path = 'Data',):
         '''
         This function generates a 1 for binding residue and 0 for non-binding per ineraction on file
         '''
@@ -82,56 +77,95 @@ class Interactions():
             ns1 = NeighborSearch(list(chain1.get_atoms()))
 
             # Find the residues in chain2 that are within cutoff_distance angstroms of chain1
-            nearby_residues2 = set()
+            Ligand = set()
             for atom in chain2.get_atoms():
                 neighbors = ns1.search(atom.coord, cutoff_distance, level='A')
                 for neighbor in neighbors:
                     residue = neighbor.get_parent()
-                    nearby_residues2.add(residue.get_id()[1])
+                    Ligand.add(residue.get_id()[1])
 
             ns2 = NeighborSearch(list(chain2.get_atoms()))
 
             # Find the residues in chain1 that are within cutoff_distance angstroms of chain2
-            nearby_residues1 = set()
+            Receptor = set()
             for atom in chain1.get_atoms():
                 neighbors = ns2.search(atom.coord, cutoff_distance, level='A')
                 for neighbor in neighbors:
                     residue = neighbor.get_parent()
-                    nearby_residues1.add(residue.get_id()[1])
+                    Receptor.add(residue.get_id()[1])
 
-            # Combine the results and return as a dictionary
-            output = {chain1.get_id(): list(nearby_residues2), chain2.get_id(): list(nearby_residues1)}
-            return output
+            return list(Ligand), list(Receptor)
         
-        labels = {}
+        '''
+        Add Entries into Labels
+        '''
+
+        labels = {'Ligand':{}, 'Receptor':{}}
 
         # Each chain in self.ligands in a nanobody. First chain is on ligand. Second is on Receptor.
         for cl in self.ligands:
             for cr in self.receptor:
-                BindingRegionResidues = getBindingRegionResidues(cl, cr)
+                ligandBinding, receptorBinding = getBindingRegionResidues(cl, cr)
                 # Remove Empty Entries
-                if len(BindingRegionResidues[cl.get_id()]) != 0 or len(BindingRegionResidues[cr.get_id()]) != 0:
-                    for k, v in BindingRegionResidues.items():
-                        if k not in list(labels.keys()):
-                            labels[k] = []
-                        for resid in v:
-                            labels[k].append(resid)
+                if len(ligandBinding) != 0 or len(receptorBinding) != 0:
+                    if cl.get_id() not in list(labels['Ligand'].keys()):
+                        labels['Ligand'][cl.get_id()] = []
+                    for resid in ligandBinding:
+                        labels['Ligand'][cl.get_id()].append(resid)
+
+                    if cr.get_id() not in list(labels['Receptor'].keys()):
+                        labels['Receptor'][cr.get_id()] = []
+                    for resid in receptorBinding:
+                        labels['Receptor'][cr.get_id()].append(resid)
         '''
         Data Generator for ScanNet PPI Interface Predictor
         - Generates a new entry for relevent chains in the residue
+        - Filters Invalid Entries
+            - Removes entries with Unknown Amino Acids
+            - Removes entries with <10 AA
         '''
         if ScanNet:
-            with open('Data/ScanNetData.txt', 'a') as data:
-                for chainID, resids in labels.items():
-                    data.writelines(f'>{self.pdbID}_{chainID}\n')
+            with open(f'{out_path}/ScanNetDataReceptors.txt', 'a') as ReceptorLabels, open(f'{out_path}/ScanNetDataLigands.txt', 'a') as LigandLabels:
+                
+                for chainID, resids in labels['Receptor'].items():
+                    entry = []
+                    entry.append(f'>{self.pdbID}_{chainID}\n')
                     for r in self.getChain(chainID):
                         label = 1 if r.get_id()[1] in resids else 0
                         if r.get_resname() in d.keys():
-                            data.writelines(
+                            entry.append(
                                 f'{chainID} {r.get_id()[1]} {d[r.get_resname()]} {label}\n'
-                            )
+                                )
                         else:
-                            print(f'Omited from {self.pdbID} - {chainID} {r.get_id()[1]} {r.get_resname()} {label}')
+                            # Just Scrap the Entry
+                            print(f'Omited {self.pdbID} REASON: {chainID} {r.get_id()[1]} {r.get_resname()} {label}')
+                            break
+                        # Check if entry is >10 AA
+                    if len(entry[1:]) > 10:
+                        entry = ''.join(entry)
+                        ReceptorLabels.write(entry)
+                    else:
+                        print(f'Omited {self.pdbID} REASON: {chainID} < 10 AA')
+
+                for chainID, resids in labels['Ligand'].items():
+                    entry = []
+                    entry.append(f'>{self.pdbID}_{chainID}\n')
+                    for r in self.getChain(chainID):
+                        label = 1 if r.get_id()[1] in resids else 0
+                        if r.get_resname() in d.keys():
+                            entry.append(
+                                f'{chainID} {r.get_id()[1]} {d[r.get_resname()]} {label}\n'
+                                )
+                        else:
+                            # Just Scrap the Entry
+                            print(f'Omited {self.pdbID} REASON: {chainID} {r.get_id()[1]} {r.get_resname()} {label}')
+                            break
+                        # Check if entry is >10 AA
+                    if len(entry[1:]) > 10:
+                        entry = ''.join(entry)
+                        LigandLabels.write(entry)
+                    else:
+                        print(f'Omited {self.pdbID} REASON: {chainID} < 10 AA')
 
         return labels
 
